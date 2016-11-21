@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>The Gould Belt</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #ffffff;
+				background-color: #000000;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				position: absolute;
+				top: 0px;
+				width: 100%;
+				padding: 5px;
+				font-family: Monospace;
+				font-size: 13px;
+				text-align: center;
+				font-weight: bold;
+			}
+			a {
+				color: #fff;
+			}
+		</style>
+	</head>
+	<body>
+				<div id="container"></div>
+				<div id="info"><a href="http://lnfm1.sai.msu.ru/lnfm/WBVR/index.shtml?eng"target="_blank">Dataset</a> The Gould Belt, home of Orion, and many other main sequence stars.<br> Our sun rendered as a sphere and at comparable color, but not size</div>
+
+		<script src="three.min.js"></script>
+
+		<script src="Detector.js"></script>
+		<script src="stats.min.js"></script>
+		<script src="TrackballControls.js"></script>
+		<script src="XYZ.js"></script>
+
+		<script type="x-shader/x-vertex" id="vertexshader">
+
+			attribute float size;
+			attribute vec3 customColor;
+
+			varying vec3 vColor;
+
+			void main() {
+
+				vColor = customColor;
+
+				vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+
+				gl_PointSize = size * ( 300.0 / -mvPosition.z );
+
+				gl_Position = projectionMatrix * mvPosition;
+
+			}
+
+		</script>
+
+		<script type="x-shader/x-fragment" id="fragmentshader">
+
+			uniform vec3 color;
+			uniform sampler2D texture;
+
+			varying vec3 vColor;
+
+			void main() {
+
+				//gl_FragColor = vec4( color * vColor, 1.0 );
+				gl_FragColor = vec4( vColor, 1.0 );
+
+				gl_FragColor = gl_FragColor * texture2D( texture, gl_PointCoord );
+
+			}
+
+		</script>
+
+
+		<script>
+
+		if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+		var renderer, scene, camera, stats, controls;
+
+		var particleSystem, uniforms, geometry, earth, sun;
+
+		var colors;
+
+		var particles = StarData.length;//1000; 
+
+		var WIDTH = window.innerWidth;
+		var HEIGHT = window.innerHeight;
+
+		init();
+		animate();
+
+
+
+		function init() {
+
+			camera = new THREE.PerspectiveCamera( 40, WIDTH / HEIGHT, 1, 10000 );
+			camera.position.z = 300;
+
+			scene = new THREE.Scene();
+
+			uniforms = {
+
+				color:     { type: "c", value: new THREE.Color( 0x0fffff ) },
+				texture:   { type: "t", value: new THREE.TextureLoader().load(  "Sprite2.jpg") }
+
+			};
+
+
+			controls = new THREE.TrackballControls( camera );
+
+			controls.rotateSpeed = 5.0;
+			controls.zoomSpeed = 1.2;
+			controls.panSpeed = 0.8;
+
+			controls.noZoom = false;
+			controls.noPan = false;
+
+			controls.staticMoving = true;
+			controls.dynamicDampingFactor = 0.3;
+
+			controls.keys = [ 65, 83, 68 ];
+
+			controls.addEventListener( 'change', render );
+
+
+
+			var shaderMaterial = new THREE.ShaderMaterial( {
+
+				uniforms:       uniforms,
+				vertexShader:   document.getElementById( 'vertexshader' ).textContent,
+				fragmentShader: document.getElementById( 'fragmentshader' ).textContent,
+
+				blending:       THREE.AdditiveBlending,
+				depthTest:      false,
+				transparent:    true
+
+			});
+
+
+			var radius = 50;
+
+			geometry = new THREE.BufferGeometry();
+
+			var positions = new Float32Array( particles * 3 );
+			var colors = new Float32Array( particles * 3 );
+			var sizes = new Float32Array( particles );
+
+			var color = new THREE.Color();
+
+			for ( var i = 0, i3 = 0; i < particles; i ++, i3 += 3 ) {
+
+				positions[ i3 + 0 ] = StarData[i].x * radius;
+				positions[ i3 + 1 ] = StarData[i].y * radius;
+				positions[ i3 + 2 ] = StarData[i].z * radius;
+
+				/*
+				positions[ i3 + 0 ] = ( Math.random() * 2 - 1 ) * radius;
+				positions[ i3 + 1 ] = ( Math.random() * 2 - 1 ) * radius;
+				positions[ i3 + 2 ] = ( Math.random() * 2 - 1 ) * radius;
+				*/
+
+				//color.setHSL( StarData[i].mag, 1.0, 0.5 );
+				color = colorMapper(StarData[i].mag);
+
+				colors[ i3 + 0 ] = color.r;
+				colors[ i3 + 1 ] = color.g;
+				colors[ i3 + 2 ] = color.b;
+
+				sizes[ i ] = 1;
+
+			}
+
+			geometry.addAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+			geometry.addAttribute( 'customColor', new THREE.BufferAttribute( colors, 3 ) );
+			geometry.addAttribute( 'size', new THREE.BufferAttribute( sizes, 1 ) );
+
+			particleSystem = new THREE.Points( geometry, shaderMaterial );
+
+			scene.add( particleSystem );
+
+			var geo = new THREE.SphereGeometry( 0.5, 32, 32 );
+			var mat = new THREE.MeshBasicMaterial();
+			mat.color = colorMapper(4.83);
+			sun = new THREE.Mesh( geo, mat );
+			scene.add( sun );
+
+			/*
+			var geo1 = new THREE.SphereGeometry( 0.6, 32, 32 );
+			var mat1 = new THREE.MeshBasicMaterial( {color: 0x00ff66} );
+			earth = new THREE.Mesh( geo1, mat1 );
+			earth.position.set(0.1);
+			scene.add( earth );
+			*/
+
+			renderer = new THREE.WebGLRenderer({logarithmicDepthBuffer:true	});
+			renderer.setPixelRatio( window.devicePixelRatio );
+			renderer.setSize( WIDTH, HEIGHT );
+
+			var container = document.getElementById( 'container' );
+			container.appendChild( renderer.domElement );
+
+			stats = new Stats();
+			stats.domElement.style.position = 'absolute';
+			stats.domElement.style.top = '0px';
+			container.appendChild( stats.domElement );
+
+			//
+
+			window.addEventListener( 'resize', onWindowResize, false );
+
+		}
+
+		function colorMapper(mag){
+			if (mag < -3.6){
+				//Blue
+				return new THREE.Color(0x80bfff);
+			} else if(mag < 1.1){
+				//White
+				return new THREE.Color(0xffffff);
+			} else if(mag < 2.8){
+				//whiteyello
+				return new THREE.Color(0xffffcc);
+			} else if(mag < 4.6){
+				//yellow
+				return new THREE.Color(0xffff80);
+			} else if(mag < 5.8){
+				//orange
+				return new THREE.Color(0xff9933);
+			} else if(mag < 8.5){
+				//redorange
+				return new THREE.Color(0xff6633);
+			} else if(mag < 14.8){
+				//red
+				return new THREE.Color(0xff3333);
+			} 
+		}
+
+		function onWindowResize() {
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			controls.handleResize();
+
+		}
+
+		function animate() {
+
+			requestAnimationFrame( animate );
+
+			render();
+			stats.update();
+			controls.update();
+
+		}
+
+		function render() {
+
+			var time = Date.now() * 0.005;
+
+			//particleSystem.rotation.z = 0.01 * time;
+
+			var sizes = geometry.attributes.size.array;
+
+			/*for ( var i = 0; i < particles; i++ ) {
+
+				sizes[ i ] = 10 * ( 1 + Math.sin( 0.1 * i + time ) );
+
+			}*/
+
+			geometry.attributes.size.needsUpdate = true;
+
+			renderer.render( scene, camera );
+
+		}
+
+	</script>
+
+</body>
+</html>
